@@ -67,11 +67,8 @@ jobs:
             export MKXPZ_PREFIX=$GITHUB_WORKSPACE/linux/build-arm64
           fi
           
-          # [핵심 수정] Ogg를 먼저 단일 스레드로 빌드하여 경로를 확보합니다.
-          make ogg
-          
-          # 그 다음 나머지 라이브러리들을 병렬로 빌드합니다.
-          make -j$(nproc)
+          # [핵심 수정] 병렬 빌드(-j)를 제거하여 의존성 순서(Ogg -> Vorbis)를 보장합니다.
+          make -j1
 
       # 4. 최종 MKXP-Z 바이너리 컴파일
       - name: Build MKXP-Z Executable
