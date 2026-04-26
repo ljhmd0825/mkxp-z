@@ -9,13 +9,10 @@ on:
 jobs:
   build-linux-arm64:
     name: Linux arm64 cross compile (Ubuntu 20.04 via Docker)
-    # ubuntu-20.04 runner는 2025-04-15 삭제됨 → 22.04에서 Docker로 대체
     runs-on: ubuntu-22.04
 
     steps:
-      # ── 1. runner(22.04)에서 git으로 서브모듈 포함 체크아웃 ──────────
-      # container: 블록을 쓰면 checkout 전에 git 설치가 불가능하므로
-      # checkout은 runner에서 하고, 빌드는 docker run으로 실행
+      # ── 1. runner(22.04)에서 서브모듈 포함 체크아웃 ─────────────────
       - name: Checkout mkxp-z
         uses: actions/checkout@v4
         with:
@@ -34,7 +31,6 @@ jobs:
             linux-arm64-deps-ubuntu20-
 
       # ── 3. 의존성 빌드 (ubuntu:20.04 컨테이너 안에서) ──────────────
-      # $GITHUB_WORKSPACE를 컨테이너에 마운트해서 체크아웃된 소스 공유
       - name: Build dependencies (arm64 cross, inside ubuntu:20.04)
         if: steps.cache-deps.outputs.cache-hit != 'true'
         run: |
@@ -47,6 +43,7 @@ jobs:
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -qq
               apt-get install -y \
+                git \
                 gcc g++ \
                 gcc-aarch64-linux-gnu \
                 g++-aarch64-linux-gnu \
@@ -105,7 +102,7 @@ jobs:
               ninja -C build -j$(nproc)
             '
 
-      # ── 5. 바이너리 검증 (runner에서) ───────────────────────────────
+      # ── 5. 바이너리 검증 ─────────────────────────────────────────────
       - name: Verify output is aarch64 ELF
         run: |
           BIN=$(ls build/mkxp-z.aarch64 build/mkxp-z 2>/dev/null | head -1)
