@@ -1,0 +1,131 @@
+name: Build mkxp-z (arm64)
+
+on:
+  push:
+    branches: [ main, master, dev ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-linux-arm64:
+    name: Linux arm64 cross compile (Ubuntu 20.04)
+    runs-on: ubuntu-20.04
+
+    steps:
+      # ── 1. 소스 체크아웃 ─────────────────────────────────────────────
+      - name: Checkout mkxp-z
+        uses: actions/checkout@v4
+        with:
+          repository: mkxp-z/mkxp-z
+          ref: dev
+          submodules: recursive
+
+      # ── 2. 시스템 패키지 설치 ────────────────────────────────────────
+      # 20.04 apt로 설치 가능한 것들
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc g++ \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu \
+            autoconf automake libtool \
+            cmake \
+            pkg-config \
+            git \
+            bison \
+            nasm \
+            ninja-build \
+            zlib1g-dev \
+            libbz2-dev \
+            xorg-dev \
+            libgl1-mesa-dev \
+            libasound2-dev \
+            libpulse-dev \
+            python3 python3-pip \
+            curl wget
+
+      # ── 3. meson pip 설치 ────────────────────────────────────────────
+      # Ubuntu 20.04 apt meson = 0.53 → mkxp-z는 >=0.56 요구
+      # pip로 최신 설치
+      - name: Install meson via pip
+        run: |
+          pip3 install --upgrade 'meson>=0.56.0'
+          meson --version
+
+      # ── 4. 의존성 빌드 캐시 ─────────────────────────────────────────
+      - name: Cache built dependencies
+        id: cache-deps
+        uses: actions/cache@v4
+        with:
+          path: linux/build
+          key: linux-arm64-deps-ubuntu20-${{ hashFiles('linux/Makefile') }}
+          restore-keys: |
+            linux-arm64-deps-ubuntu20-
+
+      # ── 5. arm64 타겟 env 설정 + 의존성 빌드 ────────────────────────
+      # target-arm64.sh 가 export 하는 변수들:
+      #   ARCH=aarch64
+      #   OPENSSL_ARCH=linux-aarch64
+      #   CROSS_COMPILE=aarch64-linux-gnu-
+      #   MESON_CROSS_FILE → meson cross file 경로
+      - name: Build dependencies (cross, arm64)
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: |
+          source linux/target-arm64.sh
+          cd linux
+          make -j$(nproc)
+
+      # ── 6. meson configure ───────────────────────────────────────────
+      - name: Configure meson
+        run: |
+          source linux/target-arm64.sh
+          CROSS_FILE="${MESON_CROSS_FILE:-linux/meson-aarch64.txt}"
+          echo "Cross file: $CROSS_FILE"
+          meson setup build \
+            --cross-file "$CROSS_FILE" \
+            --buildtype=release \
+            -Dappimage=false
+
+      # ── 7. 빌드 ──────────────────────────────────────────────────────
+      - name: Build
+        run: ninja -C build -j$(nproc)
+
+      # ── 8. 바이너리 검증 ─────────────────────────────────────────────
+      - name: Verify output is aarch64 ELF
+        run: |
+          BIN=$(ls build/mkxp-z.aarch64 build/mkxp-z 2>/dev/null | head -1)
+          echo "Binary: $BIN"
+          file "$BIN"
+          readelf -h "$BIN" | grep -E 'Class|Machine'
+          readelf -h "$BIN" | grep -q 'AArch64' \
+            && echo "✓ aarch64 confirmed" \
+            || (echo "✗ unexpected arch!" && exit 1)
+
+      # ── 9. 아티팩트 패키징 ───────────────────────────────────────────
+      - name: Package artifact
+        run: |
+          mkdir -p artifact/lib
+
+          # 바이너리
+          cp build/mkxp-z.aarch64 artifact/ 2>/dev/null \
+            || cp build/mkxp-z artifact/
+
+          # 의존성 빌드로 생성된 .so (Ruby, OpenAL 등)
+          find linux/build/lib -name "*.so*" ! -type d 2>/dev/null \
+            | xargs -I{} cp -Lv {} artifact/lib/ || true
+
+          # 셰이더, 에셋
+          [ -d assets ] && cp -r assets artifact/ || true
+
+          echo "── artifact layout ──"
+          find artifact -type f | sort
+
+      # ── 10. 업로드 ───────────────────────────────────────────────────
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkxp-z-linux-arm64-${{ github.sha }}
+          path: artifact/
+          retention-days: 30
