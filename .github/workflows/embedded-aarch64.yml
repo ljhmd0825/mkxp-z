@@ -66,7 +66,7 @@ jobs:
           cd ..
           rm -rf autoconf-2.71*
 
-      # 3. MKXP-Z 전용 라이브러리 빌드 (linux/Makefile 실행)
+      # 3. MKXP-Z 전용 라이브러리 빌드
       - name: Build External Libraries
         run: |
           cd linux
@@ -79,14 +79,13 @@ jobs:
             export MKXPZ_PREFIX=$GITHUB_WORKSPACE/linux/build-arm64
           fi
 
-          # [핵심 수정] Makefile 내의 dbus 빌드 옵션을 강제로 수정합니다.
-          # -DDBUS_BUILD_TESTS=ON으로 되어 있는 부분을 OFF로 바꿉니다.
-          sed -i 's/-DDBUS_BUILD_TESTS=ON/-DDBUS_BUILD_TESTS=OFF/g' Makefile
-          # 혹시 도큐먼트 빌드 때문에 죽는 것도 방지합니다.
-          sed -i 's/cmake ../cmake .. -DDBUS_ENABLE_DOXYGEN_DOCS=OFF -DDBUS_ENABLE_XML_DOCS=OFF/g' Makefile
-          
-          # [핵심 수정] 병렬 빌드(-j)를 제거하여 의존성 순서(Ogg -> Vorbis)를 보장합니다.
-          make -j1
+          # [강력 조치] Makefile에서 dbus 빌드 섹션을 통째로 주석 처리하거나 빈 명령어로 대체
+          # dbus를 빌드하는 타겟을 찾아 아무것도 안 하게 만듭니다.
+          sed -i 's/cd .*dbus.* cmake/echo Skipping dbus build/g' Makefile
+          sed -i 's/cd .*dbus.* make/echo Skipping dbus install/g' Makefile
+
+          # 순차 빌드로 안전하게 시작
+          make
 
       # 4. 최종 MKXP-Z 바이너리 컴파일
       - name: Build MKXP-Z Executable
