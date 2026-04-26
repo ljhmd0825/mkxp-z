@@ -29,28 +29,38 @@ jobs:
           restore-keys: |
             build-cache-focal-arm64-
 
-      # 2. APT 저장소 설정 및 도구 설치 (CMake 업데이트 포함)
+      # 2. APT 저장소 설정 및 도구 설치
       - name: Setup Multi-Arch Repositories
         run: |
           export DEBIAN_FRONTEND=noninteractive
           
-          # CMake 최신 버전을 받기 위한 Kitware 리포지토리 추가
-          apt-get update && apt-get install -y gpg wget
-          wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg
-          echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ focal main' > /etc/apt/sources.list.d/kitware.list
+          # 1. 기존 amd64 저장소는 유지하되, arm64 전용 ports 주소 추가
+          # 기존 소스 리스트에서 amd64 아키텍처 명시
+          sed -i 's/deb http/deb [arch=amd64] http/g' /etc/apt/sources.list
           
-          # 아키텍처 추가 및 업데이트
+          # arm64 패키지는 반드시 ports.ubuntu.com에서 받아야 합니다 (핵심)
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal main restricted universe multiverse" > /etc/apt/sources.list.d/arm64.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-security main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list
+          
+          # 2. 아키텍처 추가 및 업데이트
           dpkg --add-architecture arm64
           apt-get update
           
-          # 핵심: 여기서 설치되는 cmake는 이제 3.19 이상의 최신 버전입니다.
+          # 3. CMake 최신 버전 설치 (file(CHMOD) 에러 해결용)
+          apt-get install -y gpg wget
+          wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg
+          echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ focal main' > /etc/apt/sources.list.d/kitware.list
+          apt-get update
+          
+          # 4. 필수 패키지 설치
           apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
             git build-essential cmake meson autoconf automake libtool pkg-config ruby bison xxd \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 libasound2-dev:arm64 \
-            libpulse-dev:arm64 libx11-dev:arm64 libexpat1-dev:arm64
+            libpulse-dev:arm64 libx11-dev:arm64 libexpat1-dev:arm64 libdbus-1-dev:arm64
 
-          # Autoconf 2.71 (theora 등 최신 소스 대응용)
+          # 5. Autoconf 2.71 설치 (Theora 등 대응)
           wget https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.gz
           tar -xzf autoconf-2.71.tar.gz && cd autoconf-2.71 && ./configure --prefix=/usr && make -j$(nproc) && make install
           cd .. && rm -rf autoconf-2.71*
