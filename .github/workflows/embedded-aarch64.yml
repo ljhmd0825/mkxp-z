@@ -1,13 +1,13 @@
 name: Manual Embedded aarch64 Build
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Actions 탭에서 수동으로 버튼을 눌러 실행합니다.
 
 jobs:
   build-aarch64-focal:
     name: Ubuntu 20.04 aarch64 (Embedded)
     runs-on: ubuntu-latest
-    container: ubuntu:20.04
+    container: ubuntu:20.04 # GCC 9 및 Glibc 2.31 환경 강제
     
     defaults:
       run:
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 1. 의존성 캐싱 (패키지 다운로드 시간 단축)
+      # 1. 의존성 및 빌드 캐싱
       - name: Cache APT and Dependencies
         uses: actions/cache@v4
         with:
@@ -29,58 +29,67 @@ jobs:
           restore-keys: |
             build-cache-focal-arm64-
 
-      # 2. APT 저장소 정상화 및 도구 설치
+      # 2. APT 저장소 정상화 및 도구 설치 (비대화형 모드)
       - name: Setup Multi-Arch Repositories
         run: |
+          # 프롬프트 차단 및 타임존 자동 설정
+          export DEBIAN_FRONTEND=noninteractive
+          ln -fs /usr/share/zoneinfo/UTC /etc/localtime
+          
           # 아키텍처 추가
           dpkg --add-architecture arm64
           
-          # 기존 소스(amd64)와 ARM 전용 소스(ports) 분리
+          # 기존 소스(amd64)와 ARM 전용 소스(ports) 분리하여 404 에러 방지
           sed -i 's/deb http/deb [arch=amd64] http/g' /etc/apt/sources.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ focal main restricted universe multiverse" > /etc/apt/sources.list.d/arm64.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-security main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list
           
           apt update
-          # 기본 빌드 도구 (AMD64)
-          apt install -y git wget build-essential cmake meson autoconf automake libtool pkg-config ruby bison xxd
-          # 크로스 컴파일러 (AARCH64)
-          apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-          # 타겟 라이브러리 (ARM64)
-          apt install -y zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 libasound2-dev:arm64 libpulse-dev:arm64 libx11-dev:arm64
+          
+          # 기본 빌드 도구 및 크로스 컴파일러, 라이브러리 설치
+          # -y와 함께 Dpkg 옵션을 강제하여 멈춤 현상 방지
+          apt install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
+            git wget build-essential cmake meson autoconf automake libtool pkg-config ruby bison xxd \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 libasound2-dev:arm64 libpulse-dev:arm64 libx11-dev:arm64
 
-      # 3. MKXP-Z 전용 라이브러리 빌드 (linux/Makefile 실행)
+      # 3. 외부 의존성 라이브러리 빌드 (linux/Makefile)
       - name: Build External Libraries
         run: |
           cd linux
-          # target-arm64.sh가 존재하는지 체크하고 실행
+          # 전용 환경 변수 파일 로드
           if [ -f target-arm64.sh ]; then
             source target-arm64.sh
           else
-            # 파일이 없을 경우를 대비한 최소한의 환경 변수 선언
+            # 파일이 없을 경우를 대비한 필수 변수 수동 선언
             export ARCH_MKXPZ=arm64
             export ARCH_GCC=aarch64-linux-gnu
             export MKXPZ_PREFIX=$GITHUB_WORKSPACE/linux/build-arm64
           fi
+          # 모든 코어를 사용하여 빌드 속도 향상
           make -j$(nproc)
 
-      # 4. 최종 바이너리 빌드 및 설치
+      # 4. 최종 MKXP-Z 바이너리 컴파일
       - name: Build MKXP-Z Executable
         run: |
+          # 환경 설정 재로드
           [ -f linux/target-arm64.sh ] && source linux/target-arm64.sh
           source linux/vars.sh
           
-          # build 폴더가 있으면 삭제 (깨끗한 빌드)
+          # 기존 빌드 내역 삭제 후 재설정
           rm -rf build
           
+          # 크로스 컴파일 파일을 사용하여 Meson 설정
           meson setup --cross-file linux/target-arm64.meson build --bindir=. --prefix=$GITHUB_WORKSPACE/build/local
+          
           cd build
           ninja -j$(nproc)
           ninja install
 
-      # 5. 결과물 업로드
+      # 5. 빌드 결과물 업로드
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mkxp-z-focal-arm64-$(date +'%Y%m%d')
+          name: mkxp-z-focal-arm64-artifact
           path: build/local
