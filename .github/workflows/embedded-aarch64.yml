@@ -34,35 +34,31 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           
-          # 1. 기존 amd64 저장소는 유지하되, arm64 전용 ports 주소 추가
-          # 기존 소스 리스트에서 amd64 아키텍처 명시
+          # 1. 아키텍처 추가 및 저장소 분리 (이 부분은 이제 완벽합니다)
           sed -i 's/deb http/deb [arch=amd64] http/g' /etc/apt/sources.list
-          
-          # arm64 패키지는 반드시 ports.ubuntu.com에서 받아야 합니다 (핵심)
           echo "deb [arch=arm64] http://ports.ubuntu.com/ focal main restricted universe multiverse" > /etc/apt/sources.list.d/arm64.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-security main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list
-          
-          # 2. 아키텍처 추가 및 업데이트
           dpkg --add-architecture arm64
           apt-get update
+
+          # 2. [수정] CMake 최신 버전 설치 (GPG 키 에러 방지를 위해 직접 다운로드)
+          apt-get install -y wget
+          wget https://github.com/Kitware/CMake/releases/download/v3.26.4/cmake-3.26.4-linux-x86_64.sh
+          chmod +x cmake-3.26.4-linux-x86_64.sh
+          ./cmake-3.26.4-linux-x86_64.sh --skip-license --prefix=/usr/local
+          ln -sf /usr/local/bin/cmake /usr/bin/cmake
           
-          # 3. CMake 최신 버전 설치 (file(CHMOD) 에러 해결용)
-          apt-get install -y gpg wget
-          wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg
-          echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ focal main' > /etc/apt/sources.list.d/kitware.list
-          apt-get update
-          
-          # 4. 필수 패키지 설치
+          # 3. 필수 패키지 설치 (Xext 등 아까 추가한 것들 포함)
           apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-            git build-essential cmake meson autoconf automake libtool pkg-config ruby bison xxd \
+            git build-essential meson autoconf automake libtool pkg-config ruby bison xxd \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 libasound2-dev:arm64 \
             libpulse-dev:arm64 libx11-dev:arm64 libexpat1-dev:arm64 libdbus-1-dev:arm64 \
             libxext-dev:arm64 libxrandr-dev:arm64 libxcursor-dev:arm64 libxinerama-dev:arm64 \
             libxi-dev:arm64 libxss-dev:arm64 libxkbcommon-dev:arm64 libdrm-dev:arm64 libgbm-dev:arm64
 
-          # 5. Autoconf 2.71 설치 (Theora 등 대응)
+          # 4. Autoconf 2.71 설치
           wget https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.gz
           tar -xzf autoconf-2.71.tar.gz && cd autoconf-2.71 && ./configure --prefix=/usr && make -j$(nproc) && make install
           cd .. && rm -rf autoconf-2.71*
