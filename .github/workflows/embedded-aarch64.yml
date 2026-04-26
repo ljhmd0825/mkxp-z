@@ -29,62 +29,46 @@ jobs:
           restore-keys: |
             build-cache-focal-arm64-
 
-      # 2. APT 저장소 정상화 및 도구 설치 (비대화형 모드)
+      # 2. APT 저장소 정상화 및 도구 설치
       - name: Setup Multi-Arch Repositories
         run: |
-          # 프롬프트 차단 및 타임존 자동 설정
           export DEBIAN_FRONTEND=noninteractive
+          # 타임존 설정 (tzdata 멈춤 방지)
           ln -fs /usr/share/zoneinfo/UTC /etc/localtime
           
-          # 아키텍처 추가
           dpkg --add-architecture arm64
-          
-          # 기존 소스(amd64)와 ARM 전용 소스(ports) 분리하여 404 에러 방지
           sed -i 's/deb http/deb [arch=amd64] http/g' /etc/apt/sources.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ focal main restricted universe multiverse" > /etc/apt/sources.list.d/arm64.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list
           echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-security main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list
           
           apt update
-          
-          # 기본 빌드 도구 및 크로스 컴파일러, 라이브러리 설치
-          # -y와 함께 Dpkg 옵션을 강제하여 멈춤 현상 방지
+          # dbus 빌드에 필요한 모든 의존성을 arm64용으로 미리 때려 넣습니다.
           apt install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
             git wget build-essential cmake meson autoconf automake libtool pkg-config ruby bison xxd \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 libasound2-dev:arm64 \
-            libpulse-dev:arm64 libx11-dev:arm64 libexpat1-dev:arm64 \
-            libfontconfig1-dev:arm64 libfreetype6-dev:arm64 libssl-dev:arm64 libyaml-dev:arm64
+            libpulse-dev:arm64 libx11-dev:arm64 libexpat1-dev:arm64 libdbus-1-dev:arm64
 
-          # [추가] Autoconf 2.71 수동 설치
+          # Autoconf 2.71 (theora 등 최신 소스 대응용)
           wget https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.gz
-          tar -xzf autoconf-2.71.tar.gz
-          cd autoconf-2.71
-          ./configure --prefix=/usr
-          make -j$(nproc)
-          make install
-          cd ..
-          rm -rf autoconf-2.71*
+          tar -xzf autoconf-2.71.tar.gz && cd autoconf-2.71 && ./configure --prefix=/usr && make -j$(nproc) && make install
+          cd .. && rm -rf autoconf-2.71*
 
       # 3. MKXP-Z 전용 라이브러리 빌드
       - name: Build External Libraries
         run: |
           cd linux
-          # 환경 변수 로드
-          if [ -f target-arm64.sh ]; then
-            source target-arm64.sh
-          else
+          [ -f target-arm64.sh ] && source target-arm64.sh || {
             export ARCH_MKXPZ=arm64
             export ARCH_GCC=aarch64-linux-gnu
             export MKXPZ_PREFIX=$GITHUB_WORKSPACE/linux/build-arm64
-          fi
-
-          # [강력 조치] Makefile에서 dbus 빌드 섹션을 통째로 주석 처리하거나 빈 명령어로 대체
-          # dbus를 빌드하는 타겟을 찾아 아무것도 안 하게 만듭니다.
-          sed -i 's/cd .*dbus.* cmake/echo Skipping dbus build/g' Makefile
-          sed -i 's/cd .*dbus.* make/echo Skipping dbus install/g' Makefile
-
-          # 순차 빌드로 안전하게 시작
+          }
+          
+          # PKG_CONFIG_PATH를 강제로 지정하여 CMake가 arm64용 expat과 dbus를 찾게 합니다.
+          export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig:$MKXPZ_PREFIX/lib/pkgconfig
+          
+          # 병렬 빌드(-j) 없이 순차 빌드로 의존성 순서를 보장합니다.
           make
 
       # 4. 최종 MKXP-Z 바이너리 컴파일
