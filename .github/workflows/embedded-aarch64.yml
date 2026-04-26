@@ -84,7 +84,7 @@ jobs:
           # 3. [추가] 에러를 유발하는 우분투 전용 Ruby 설정 파일 삭제
           # 이 파일이 있으면 최신 Ruby 설치 시 'rubyforge_project' 에러가 납니다.
           if [ -f /usr/lib/ruby/vendor_ruby/rubygems/defaults/operating_system.rb ]; then
-            sudo rm /usr/lib/ruby/vendor_ruby/rubygems/defaults/operating_system.rb
+            rm /usr/lib/ruby/vendor_ruby/rubygems/defaults/operating_system.rb
           fi
 
           # 4. 빌드 시작
