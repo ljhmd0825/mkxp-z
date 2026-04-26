@@ -58,7 +58,9 @@ jobs:
             git build-essential cmake meson autoconf automake libtool pkg-config ruby bison xxd \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 libasound2-dev:arm64 \
-            libpulse-dev:arm64 libx11-dev:arm64 libexpat1-dev:arm64 libdbus-1-dev:arm64
+            libpulse-dev:arm64 libx11-dev:arm64 libexpat1-dev:arm64 libdbus-1-dev:arm64 \
+            libxext-dev:arm64 libxrandr-dev:arm64 libxcursor-dev:arm64 libxinerama-dev:arm64 \
+            libxi-dev:arm64 libxss-dev:arm64 libxkbcommon-dev:arm64 libdrm-dev:arm64 libgbm-dev:arm64
 
           # 5. Autoconf 2.71 설치 (Theora 등 대응)
           wget https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.gz
