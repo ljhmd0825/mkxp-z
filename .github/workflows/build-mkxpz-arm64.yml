@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      # ── 1. 소스 체크아웃 (runner에서 — git 있음) ────────────────────
+      # ── 1. 소스 체크아웃 ────────────────────────────────────────────
       - name: Checkout mkxp-z
         uses: actions/checkout@v4
         with:
@@ -66,10 +66,20 @@ jobs:
               git config --global http.lowSpeedLimit 1000
               git config --global http.lowSpeedTime 60
 
+              # ── autoconf 2.71 소스 빌드 ──────────────────────────────
+              # Ubuntu 20.04 apt autoconf = 2.69, theora autogen.sh는 2.71 필요
+              cd /tmp
+              curl -fsSL https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.gz | tar xz
+              cd autoconf-2.71
+              ./configure --prefix=/usr/local
+              make -j$(nproc)
+              make install
+              # 기존 2.69보다 우선 적용 확인
+              autoconf --version | head -1
+
+              cd /work
               source linux/target-arm64.sh
               cd linux
-              # -j1 로 직렬 빌드 — ogg가 끝난 뒤 vorbis가 시작되도록
-              # 병렬이면 ogg 빌드 전에 vorbis cmake가 먼저 실행되어 실패함
               make -j1
             '
 
@@ -106,7 +116,6 @@ jobs:
                 --buildtype=release \
                 -Dappimage=false
 
-              # 본체 빌드는 병렬 OK
               ninja -C build -j$(nproc)
             '
 
