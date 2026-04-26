@@ -19,7 +19,6 @@ jobs:
           ref: dev
           submodules: recursive
 
-      # Makefile 전체 내용 출력 — 빌드 순서, 각 라이브러리 configure 옵션 확인용
       - name: Print linux/Makefile for inspection
         run: cat linux/Makefile
 
@@ -76,10 +75,10 @@ jobs:
               make install
               autoconf --version | head -1
 
-              # zlib을 aarch64용으로 먼저 직접 빌드해서 PREFIX에 설치
-              # linux/Makefile의 libpng configure가 크로스 zlib을 못 찾는 문제 우회
+              # zlib aarch64 크로스 빌드 — GitHub에서 받음 (zlib.net은 불안정)
+              # libpng configure가 크로스 sysroot의 zlib을 못 찾는 문제 우회
               cd /tmp
-              curl -fsSL https://zlib.net/zlib-1.3.1.tar.gz | tar xz
+              curl -fsSL https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz | tar xz
               cd zlib-1.3.1
               CC=aarch64-linux-gnu-gcc \
               CFLAGS="-O3" \
