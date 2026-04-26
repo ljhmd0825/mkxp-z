@@ -70,48 +70,41 @@ jobs:
 
       # 3. MKXP-Z 전용 라이브러리 빌드
       - name: Build External Libraries
+        # 캐시가 적중(hit)했다면 이 단계를 건너뜁니다.
+        if: steps.cache-apt-and-dependencies.outputs.cache-hit != 'true'
         run: |
           cd linux
-          [ -f target-arm64.sh ] && source target-arm64.sh || {
-            export ARCH_MKXPZ=arm64
-            export ARCH_GCC=aarch64-linux-gnu
-            export MKXPZ_PREFIX=$GITHUB_WORKSPACE/linux/build-arm64
-          }
+          # 변수 수동 선언 (안전빵)
+          export ARCH_MKXPZ=arm64
+          export ARCH_GCC=aarch64-linux-gnu
+          export MKXPZ_PREFIX=$GITHUB_WORKSPACE/linux/build-arm64
           
-          # 1. PKG_CONFIG_PATH 설정 (arm64 라이브러리 인식용)
           export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig:$MKXPZ_PREFIX/lib/pkgconfig
-          
-          # 2. [추가] 시스템 Ruby 간섭 차단 (Ruby 빌드 에러 해결 핵심)
           export GEM_PATH=""
           export GEM_HOME=""
           export RUBYOPT="-Eutf-8"
           
-          # 3. [추가] 에러를 유발하는 우분투 전용 Ruby 설정 파일 삭제
-          # 이 파일이 있으면 최신 Ruby 설치 시 'rubyforge_project' 에러가 납니다.
           if [ -f /usr/lib/ruby/vendor_ruby/rubygems/defaults/operating_system.rb ]; then
             rm /usr/lib/ruby/vendor_ruby/rubygems/defaults/operating_system.rb
           fi
 
-          # 4. 빌드 시작
-          # 의존성 순서 꼬임을 방지하기 위해 순차 빌드(make)를 유지합니다.
           make
 
       # 4. mkxp-z 본체 빌드
       - name: Build mkxp-z
         run: |
-          # 1. 환경 변수 재설정
           cd linux
-          [ -f target-arm64.sh ] && source target-arm64.sh
+          # 경로 변수를 절대 경로로 고정
+          export MKXPZ_PREFIX=$GITHUB_WORKSPACE/linux/build-arm64
           
-          # 2. [핵심] Meson 크로스 파일이 없을 경우를 대비해 직접 생성합니다.
-          # 만약 이미 파일이 있다면 이 과정은 안전하게 무시되거나 덮어씌워집니다.
+          # 2. Meson 크로스 파일 생성 (pkg-config 경고 수정본)
           cat <<EOF > target-arm64.meson
           [binaries]
           c = 'aarch64-linux-gnu-gcc'
           cpp = 'aarch64-linux-gnu-g++'
           ar = 'aarch64-linux-gnu-ar'
           strip = 'aarch64-linux-gnu-strip'
-          pkgconfig = 'pkg-config'
+          pkg-config = 'pkg-config'
 
           [host_machine]
           system = 'linux'
@@ -120,26 +113,25 @@ jobs:
           endian = 'little'
 
           [properties]
-          pkg_config_libdir = '/usr/lib/aarch64-linux-gnu/pkgconfig:$MKXPZ_PREFIX/lib/pkgconfig'
+          pkg_config_libdir = ['/usr/lib/aarch64-linux-gnu/pkgconfig', '$MKXPZ_PREFIX/lib/pkgconfig']
           EOF
 
-          # 3. 빌드 디렉토리 정리 및 설정
           cd ..
           rm -rf build-arm64-final
           
-          # 4. Meson 실행 (경로를 정확히 지정)
+          # 4. Meson 실행 (변수 대신 직접 경로 주입)
           meson setup build-arm64-final \
             --cross-file linux/target-arm64.meson \
-            --prefix=$MKXPZ_PREFIX \
-            -Druby_decl_dir=$MKXPZ_PREFIX/lib \
+            --prefix="$GITHUB_WORKSPACE/linux/build-arm64" \
+            -Druby_decl_dir="$GITHUB_WORKSPACE/linux/build-arm64/lib" \
             -Dworkdir_use_etc=false
 
-          # 5. 최종 컴파일
           ninja -C build-arm64-final install
 
-      # 5. 빌드 결과물 업로드
+      # 5. 빌드 결과물 업로드 (경로 수정)
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: mkxp-z-focal-arm64-artifact
-          path: build/local
+          # 최종 실행 파일이 설치된 경로를 지정해야 합니다.
+          path: linux/build-arm64/bin/mkxp-z
