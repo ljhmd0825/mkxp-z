@@ -29,26 +29,26 @@ jobs:
           restore-keys: |
             build-cache-focal-arm64-
 
-      # 2. APT 저장소 정상화 및 도구 설치
+      # 2. APT 저장소 설정 및 도구 설치 (CMake 업데이트 포함)
       - name: Setup Multi-Arch Repositories
         run: |
           export DEBIAN_FRONTEND=noninteractive
-          # 타임존 설정 (tzdata 멈춤 방지)
-          ln -fs /usr/share/zoneinfo/UTC /etc/localtime
           
+          # CMake 최신 버전을 받기 위한 Kitware 리포지토리 추가
+          apt-get update && apt-get install -y gpg wget
+          wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor -o /usr/share/keyrings/kitware-archive-keyring.gpg
+          echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ focal main' > /etc/apt/sources.list.d/kitware.list
+          
+          # 아키텍처 추가 및 업데이트
           dpkg --add-architecture arm64
-          sed -i 's/deb http/deb [arch=amd64] http/g' /etc/apt/sources.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal main restricted universe multiverse" > /etc/apt/sources.list.d/arm64.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-security main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list
+          apt-get update
           
-          apt update
-          # dbus 빌드에 필요한 모든 의존성을 arm64용으로 미리 때려 넣습니다.
-          apt install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
-            git wget build-essential cmake meson autoconf automake libtool pkg-config ruby bison xxd \
+          # 핵심: 여기서 설치되는 cmake는 이제 3.19 이상의 최신 버전입니다.
+          apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
+            git build-essential cmake meson autoconf automake libtool pkg-config ruby bison xxd \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 libasound2-dev:arm64 \
-            libpulse-dev:arm64 libx11-dev:arm64 libexpat1-dev:arm64 libdbus-1-dev:arm64
+            libpulse-dev:arm64 libx11-dev:arm64 libexpat1-dev:arm64
 
           # Autoconf 2.71 (theora 등 최신 소스 대응용)
           wget https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.gz
