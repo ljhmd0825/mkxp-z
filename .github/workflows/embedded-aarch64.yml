@@ -54,20 +54,23 @@ jobs:
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
             zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 libasound2-dev:arm64 libpulse-dev:arm64 libx11-dev:arm64
 
-      # 3. 외부 의존성 라이브러리 빌드 (linux/Makefile)
+      # 3. MKXP-Z 전용 라이브러리 빌드 (linux/Makefile 실행)
       - name: Build External Libraries
         run: |
           cd linux
-          # 전용 환경 변수 파일 로드
+          # 환경 변수 로드
           if [ -f target-arm64.sh ]; then
             source target-arm64.sh
           else
-            # 파일이 없을 경우를 대비한 필수 변수 수동 선언
             export ARCH_MKXPZ=arm64
             export ARCH_GCC=aarch64-linux-gnu
             export MKXPZ_PREFIX=$GITHUB_WORKSPACE/linux/build-arm64
           fi
-          # 모든 코어를 사용하여 빌드 속도 향상
+          
+          # [핵심 수정] Ogg를 먼저 단일 스레드로 빌드하여 경로를 확보합니다.
+          make ogg
+          
+          # 그 다음 나머지 라이브러리들을 병렬로 빌드합니다.
           make -j$(nproc)
 
       # 4. 최종 MKXP-Z 바이너리 컴파일
