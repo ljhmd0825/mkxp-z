@@ -86,12 +86,13 @@ jobs:
           # dbus 에러가 나더라도 무시하고 진행 (이미 apt로 설치됨)
           make -k || true
 
-      # 4. mkxp-z 본체 빌드 (절대 경로 고정)
+      # 4. mkxp-z 본체 빌드
       - name: Build mkxp-z
         run: |
           cd linux
           export MKXPZ_PREFIX=$GITHUB_WORKSPACE/linux/build-arm64
           
+          # 1. 크로스 파일 생성 (pkg_config_libdir 경로 배열로 정확히 지정)
           cat <<EOF > target-arm64.meson
           [binaries]
           c = 'aarch64-linux-gnu-gcc'
@@ -107,17 +108,20 @@ jobs:
           endian = 'little'
 
           [properties]
+          # 빌드한 루비와 시스템 라이브러리 경로를 모두 포함합니다.
           pkg_config_libdir = ['/usr/lib/aarch64-linux-gnu/pkgconfig', '$MKXPZ_PREFIX/lib/pkgconfig']
           EOF
 
           cd ..
           rm -rf build-arm64-final
+          
+          # 2. [수정] 존재하지 않는 ruby_decl_dir 옵션을 제거하고 빌드 설정을 진행합니다.
           meson setup build-arm64-final \
             --cross-file linux/target-arm64.meson \
             --prefix="$GITHUB_WORKSPACE/linux/build-arm64" \
-            -Druby_decl_dir="$GITHUB_WORKSPACE/linux/build-arm64/lib" \
             -Dworkdir_use_etc=false
 
+          # 3. 최종 컴파일
           ninja -C build-arm64-final install
 
       # 5. 빌드 결과물 업로드
