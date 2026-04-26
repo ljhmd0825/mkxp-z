@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      # ── 1. runner(22.04)에서 서브모듈 포함 체크아웃 ─────────────────
+      # ── 1. 소스 체크아웃 (runner에서 — git 있음) ────────────────────
       - name: Checkout mkxp-z
         uses: actions/checkout@v4
         with:
@@ -20,17 +20,19 @@ jobs:
           ref: dev
           submodules: recursive
 
-      # ── 2. 의존성 빌드 캐시 ─────────────────────────────────────────
-      - name: Cache built dependencies
+      # ── 2. 의존성 캐시 ──────────────────────────────────────────────
+      - name: Cache dependencies
         id: cache-deps
         uses: actions/cache@v4
         with:
-          path: linux/build
+          path: |
+            linux/downloads
+            linux/build
           key: linux-arm64-deps-ubuntu20-${{ hashFiles('linux/Makefile') }}
           restore-keys: |
             linux-arm64-deps-ubuntu20-
 
-      # ── 3. 의존성 빌드 (ubuntu:20.04 컨테이너 안에서) ──────────────
+      # ── 3. 의존성 빌드 ───────────────────────────────────────────────
       - name: Build dependencies (arm64 cross, inside ubuntu:20.04)
         if: steps.cache-deps.outputs.cache-hit != 'true'
         run: |
@@ -38,8 +40,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/work" \
             -w /work \
             ubuntu:20.04 \
-            bash -c '
-              set -e
+            bash -ex -c '
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -qq
               apt-get install -y \
@@ -61,20 +62,25 @@ jobs:
 
               pip3 install --upgrade "meson>=0.56.0"
 
+              git config --global http.postBuffer 524288000
+              git config --global http.lowSpeedLimit 1000
+              git config --global http.lowSpeedTime 60
+
               source linux/target-arm64.sh
               cd linux
-              make -j$(nproc)
+              # -j1 로 직렬 빌드 — ogg가 끝난 뒤 vorbis가 시작되도록
+              # 병렬이면 ogg 빌드 전에 vorbis cmake가 먼저 실행되어 실패함
+              make -j1
             '
 
-      # ── 4. mkxp-z 본체 빌드 (ubuntu:20.04 컨테이너 안에서) ─────────
+      # ── 4. mkxp-z 본체 빌드 ─────────────────────────────────────────
       - name: Build mkxp-z (inside ubuntu:20.04)
         run: |
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/work" \
             -w /work \
             ubuntu:20.04 \
-            bash -c '
-              set -e
+            bash -ex -c '
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -qq
               apt-get install -y \
@@ -93,12 +99,14 @@ jobs:
 
               source linux/target-arm64.sh
               CROSS_FILE="${MESON_CROSS_FILE:-linux/meson-aarch64.txt}"
+              echo "Cross file: $CROSS_FILE"
 
               meson setup build \
                 --cross-file "$CROSS_FILE" \
                 --buildtype=release \
                 -Dappimage=false
 
+              # 본체 빌드는 병렬 OK
               ninja -C build -j$(nproc)
             '
 
