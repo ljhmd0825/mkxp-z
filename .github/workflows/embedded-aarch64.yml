@@ -52,7 +52,8 @@ jobs:
           apt install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" \
             git wget build-essential cmake meson autoconf automake libtool pkg-config ruby bison xxd \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 libasound2-dev:arm64 libpulse-dev:arm64 libx11-dev:arm64
+            zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 libasound2-dev:arm64 libpulse-dev:arm64 libx11-dev:arm64 \
+            libexpat1-dev:arm64
 
           # [추가] Autoconf 2.71 수동 설치
           wget https://ftp.gnu.org/gnu/autoconf/autoconf-2.71.tar.gz
