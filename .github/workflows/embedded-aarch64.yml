@@ -1,0 +1,59 @@
+name: Manual Embedded aarch64 Build
+
+on:
+  workflow_dispatch: # Actions 탭에서 수동으로 버튼을 눌러 실행합니다.
+
+jobs:
+  build-aarch64-focal:
+    name: Ubuntu 20.04 aarch64 (Embedded Target)
+    runs-on: ubuntu-latest
+    container: ubuntu:20.04 # GCC 9 및 Glibc 2.31 환경 강제
+    
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install apt dependencies
+        run: |
+          apt update
+          apt install -y software-properties-common
+          dpkg --add-architecture arm64
+          # Ubuntu 20.04(Focal)용 ARM64 포트 추가
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal main restricted universe multiverse" >> /etc/apt/sources.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ focal-updates main restricted universe multiverse" >> /etc/apt/sources.list
+          apt update
+          
+          # 빌드 도구 및 크로스 컴파일러 설치
+          apt install -y git wget build-essential cmake meson autoconf automake libtool pkg-config ruby bison xxd
+          apt install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          
+          # 타겟용 라이브러리 (arm64 전용)
+          apt install -y zlib1g-dev:arm64 libbz2-dev:arm64 libgl1-mesa-dev:arm64 libasound2-dev:arm64 libpulse-dev:arm64 libx11-dev:arm64
+
+      - name: Build everything else
+        run: |
+          cd linux
+          # target-arm64.sh가 있다면 소싱하여 컴파일러 경로 설정
+          # 만약 파일이 없다면 직접 CC/CXX를 지정해야 할 수도 있습니다.
+          [ -f target-arm64.sh ] && source target-arm64.sh
+          make
+
+      - name: Build executable
+        run: |
+          # 기존 워크플로우의 빌드 로직 적용
+          [ -f linux/target-arm64.sh ] && source linux/target-arm64.sh
+          source linux/vars.sh
+          # 타겟 기기용 meson cross file이 있는지 확인 필요
+          meson setup --cross-file linux/target-arm64.meson build --bindir=. --prefix=$GITHUB_WORKSPACE/build/local
+          cd build
+          ninja && ninja install
+
+      - name: Prepare and Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkxp-z-embedded-aarch64-focal
+          path: build/local
