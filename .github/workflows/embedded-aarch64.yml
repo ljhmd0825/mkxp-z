@@ -73,10 +73,22 @@ jobs:
             export MKXPZ_PREFIX=$GITHUB_WORKSPACE/linux/build-arm64
           }
           
-          # PKG_CONFIG_PATH를 강제로 지정하여 CMake가 arm64용 expat과 dbus를 찾게 합니다.
+          # 1. PKG_CONFIG_PATH 설정 (arm64 라이브러리 인식용)
           export PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig:$MKXPZ_PREFIX/lib/pkgconfig
           
-          # 병렬 빌드(-j) 없이 순차 빌드로 의존성 순서를 보장합니다.
+          # 2. [추가] 시스템 Ruby 간섭 차단 (Ruby 빌드 에러 해결 핵심)
+          export GEM_PATH=""
+          export GEM_HOME=""
+          export RUBYOPT="-Eutf-8"
+          
+          # 3. [추가] 에러를 유발하는 우분투 전용 Ruby 설정 파일 삭제
+          # 이 파일이 있으면 최신 Ruby 설치 시 'rubyforge_project' 에러가 납니다.
+          if [ -f /usr/lib/ruby/vendor_ruby/rubygems/defaults/operating_system.rb ]; then
+            sudo rm /usr/lib/ruby/vendor_ruby/rubygems/defaults/operating_system.rb
+          fi
+
+          # 4. 빌드 시작
+          # 의존성 순서 꼬임을 방지하기 위해 순차 빌드(make)를 유지합니다.
           make
 
       # 4. 최종 MKXP-Z 바이너리 컴파일
