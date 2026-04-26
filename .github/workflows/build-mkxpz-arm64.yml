@@ -9,7 +9,9 @@ on:
 jobs:
   build-linux-arm64:
     name: Linux arm64 cross compile (Ubuntu 20.04)
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
+    container:
+      image: ubuntu:20.04
 
     steps:
       # ── 1. 소스 체크아웃 ─────────────────────────────────────────────
